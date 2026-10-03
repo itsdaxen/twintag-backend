@@ -1,31 +1,12 @@
 from pathlib import Path
 
-import numpy as np
-import pye57
 import pytest
 
 from twintag_backend.e57.reader import E57Reader, E57ReadError
 
 
-def write_e57(path: Path) -> None:
-    scan = pye57.E57(str(path), mode="w")
-    scan.write_scan_raw(
-        {
-            "cartesianX": np.array([0.0, 1.0]),
-            "cartesianY": np.array([0.0, 2.0]),
-            "cartesianZ": np.array([0.0, 3.0]),
-        },
-        name="Test sweep",
-        translation=np.array([1.0, 2.0, 3.0]),
-    )
-    scan.close()
-
-
-def test_reads_scan_metadata(tmp_path: Path) -> None:
-    source = tmp_path / "sample.e57"
-    write_e57(source)
-
-    metadata = E57Reader().read(source)
+def test_reads_scan_metadata(sample_e57: Path) -> None:
+    metadata = E57Reader().read(sample_e57)
 
     assert metadata.filename == "sample.e57"
     assert metadata.size_bytes > 0
