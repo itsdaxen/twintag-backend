@@ -25,6 +25,7 @@ AUGMENTATIONS = [
     "compression",
     "partial occlusion",
 ]
+SOURCE_ANGLES = ("Front", "Back", "Left", "Right")
 
 
 @router.post("/preview", response_model=SyntheticDatasetPreviewResponse)
@@ -64,12 +65,21 @@ async def create_preview(
             source_path.write_bytes(content)
             source_paths.append(source_path)
 
+        generator = SyntheticDatasetGenerator()
+        for angle, source_path in zip(SOURCE_ANGLES, source_paths, strict=True):
+            try:
+                generator.validate_source(source_path)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"{angle} image: {exc}"
+                ) from exc
+
         previews = []
         for index in range(preview_count):
             source_index = index % len(source_paths)
             output = workspace / f"preview-{index + 1}"
             try:
-                dataset = SyntheticDatasetGenerator().generate(
+                dataset = generator.generate(
                     source_paths[source_index],
                     output,
                     count=1,

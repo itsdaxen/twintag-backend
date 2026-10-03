@@ -38,3 +38,42 @@ def test_rejects_invalid_requests(tmp_path: Path) -> None:
         generator.generate(tmp_path / "missing.jpg", tmp_path / "out", count=0)
     with pytest.raises(ValueError, match="Could not read"):
         generator.generate(tmp_path / "missing.jpg", tmp_path / "out", count=1)
+
+
+def test_rejects_scene_photos_without_a_clean_background(tmp_path: Path) -> None:
+    source = tmp_path / "scene.jpg"
+    random = np.random.default_rng(4)
+    cv2.imwrite(
+        str(source), random.integers(0, 255, (240, 320, 3), dtype=np.uint8)
+    )
+
+    with pytest.raises(ValueError, match="clean background"):
+        SyntheticDatasetGenerator().generate(source, tmp_path / "out", count=1)
+
+
+def test_removes_clean_source_background_before_compositing(tmp_path: Path) -> None:
+    source = tmp_path / "device.jpg"
+    image = np.full((200, 300, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (80, 60), (220, 140), (30, 30, 30), -1)
+    cv2.imwrite(str(source), image)
+
+    dataset = SyntheticDatasetGenerator(size=320).generate(
+        source, tmp_path / "dataset", count=1, seed=7
+    )
+    generated = cv2.imread(str(tmp_path / "dataset" / dataset.samples[0].image))
+    box = dataset.samples[0].bounding_box
+    crop = generated[int(box.top) : int(box.bottom), int(box.left) : int(box.right)]
+
+    assert crop.mean() < 220
+
+
+def test_keeps_enclosed_white_device_details() -> None:
+    image = np.full((200, 300, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (60, 40), (240, 160), (80, 80, 80), -1)
+    cv2.rectangle(image, (120, 80), (180, 120), (255, 255, 255), -1)
+
+    device, mask = SyntheticDatasetGenerator()._extract_device(image)
+    center = mask[mask.shape[0] // 2, mask.shape[1] // 2]
+
+    assert center == 255
+    assert device[device.shape[0] // 2, device.shape[1] // 2].min() == 255

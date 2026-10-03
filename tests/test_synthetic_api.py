@@ -49,7 +49,8 @@ def test_rejects_unsupported_upload() -> None:
 
 
 def test_plans_ten_thousand_samples_by_default() -> None:
-    image = np.full((120, 180, 3), 230, dtype=np.uint8)
+    image = np.full((120, 180, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (15, 15), (165, 105), (30, 30, 30), -1)
     success, encoded = cv2.imencode(".jpg", image)
     assert success
 
@@ -61,3 +62,24 @@ def test_plans_ten_thousand_samples_by_default() -> None:
 
     assert response.status_code == 200
     assert response.json()["planned_samples"] == 10_000
+
+
+def test_identifies_invalid_source_angle() -> None:
+    valid = np.full((120, 180, 3), 255, dtype=np.uint8)
+    cv2.rectangle(valid, (15, 15), (165, 105), (30, 30, 30), -1)
+    success, valid_encoded = cv2.imencode(".jpg", valid)
+    assert success
+    scene = np.random.default_rng(8).integers(0, 255, (120, 180, 3), dtype=np.uint8)
+    success, scene_encoded = cv2.imencode(".jpg", scene)
+    assert success
+    files = _files(valid_encoded.tobytes())
+    files[0] = ("sources", ("front.jpg", scene_encoded.tobytes(), "image/jpeg"))
+
+    response = client.post(
+        "/api/synthetic-datasets/preview",
+        files=files,
+        data={"device_name": "ABB REX615", "device_type": "Protection relay"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("Front image:")

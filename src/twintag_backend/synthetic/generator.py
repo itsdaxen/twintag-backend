@@ -37,6 +37,12 @@ class SyntheticDatasetGenerator:
             raise ValueError("size must be at least 128 pixels")
         self.size = size
 
+    def validate_source(self, source: Path) -> None:
+        image = cv2.imread(str(source), cv2.IMREAD_COLOR)
+        if image is None:
+            raise ValueError(f"Could not read source image: {source}")
+        self._extract_device(image)
+
     def generate(
         self,
         source: Path,
@@ -49,6 +55,7 @@ class SyntheticDatasetGenerator:
         image = cv2.imread(str(source), cv2.IMREAD_COLOR)
         if image is None:
             raise ValueError(f"Could not read source image: {source}")
+        device, device_mask = self._extract_device(image)
 
         images_directory = output_directory / "images"
         labels_directory = output_directory / "labels"
@@ -59,7 +66,7 @@ class SyntheticDatasetGenerator:
 
         for index in range(count):
             sample_seed = int(random.integers(0, np.iinfo(np.uint32).max))
-            canvas, bounding_box = self._compose(image, random)
+            canvas, bounding_box = self._compose(device, device_mask, random)
             augmented, transformed_box = self._augment(
                 canvas, bounding_box, sample_seed
             )
@@ -89,23 +96,77 @@ class SyntheticDatasetGenerator:
         return dataset
 
     def _compose(
-        self, source: np.ndarray, random: np.random.Generator
+        self,
+        device: np.ndarray,
+        device_mask: np.ndarray,
+        random: np.random.Generator,
     ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
         canvas = self._background(random)
-        height, width = source.shape[:2]
+        height, width = device.shape[:2]
         maximum_side = int(self.size * random.uniform(0.38, 0.72))
         scale = maximum_side / max(height, width)
         resized_width = max(1, round(width * scale))
         resized_height = max(1, round(height * scale))
-        device = cv2.resize(
-            source, (resized_width, resized_height), interpolation=cv2.INTER_AREA
+        resized_device = cv2.resize(
+            device, (resized_width, resized_height), interpolation=cv2.INTER_AREA
+        )
+        resized_mask = cv2.resize(
+            device_mask,
+            (resized_width, resized_height),
+            interpolation=cv2.INTER_LINEAR,
         )
         left = int(random.integers(0, self.size - resized_width + 1))
         top = int(random.integers(0, self.size - resized_height + 1))
         right = left + resized_width
         bottom = top + resized_height
-        canvas[top:bottom, left:right] = device
+        alpha = resized_mask.astype(np.float32)[..., None] / 255
+        region = canvas[top:bottom, left:right].astype(np.float32)
+        composite = resized_device.astype(np.float32) * alpha + region * (1 - alpha)
+        canvas[top:bottom, left:right] = np.clip(composite, 0, 255).astype(np.uint8)
         return canvas, (left, top, right, bottom)
+
+    def _extract_device(self, source: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        height, width = source.shape[:2]
+        if min(height, width) < 64:
+            raise ValueError("Source image must be at least 64 pixels on each side")
+
+        border = np.concatenate(
+            [source[0], source[-1], source[:, 0], source[:, -1]], axis=0
+        ).astype(np.float32)
+        background = np.median(border, axis=0)
+        if float(np.mean(np.linalg.norm(border - background, axis=1))) > 18:
+            raise ValueError("Source image must show one device on a clean background")
+
+        distance = np.linalg.norm(source.astype(np.float32) - background, axis=2)
+        background_candidates = np.where(distance <= 8, 1, 0).astype(np.uint8)
+        _, components = cv2.connectedComponents(background_candidates, connectivity=8)
+        border_labels = np.unique(
+            np.concatenate(
+                [components[0], components[-1], components[:, 0], components[:, -1]]
+            )
+        )
+        connected_background = np.isin(components, border_labels)
+        mask = np.where(connected_background, 0, 255).astype(np.uint8)
+        mask = cv2.morphologyEx(
+            mask, cv2.MORPH_CLOSE, np.ones((7, 7), dtype=np.uint8)
+        )
+        points = cv2.findNonZero(mask)
+        if points is None:
+            raise ValueError("No device could be separated from the background")
+        left, top, crop_width, crop_height = cv2.boundingRect(points)
+        coverage = crop_width * crop_height / (width * height)
+        if coverage > 0.95:
+            raise ValueError("Source image must be tightly framed on a clean background")
+
+        padding = max(2, round(max(crop_width, crop_height) * 0.01))
+        left = max(0, left - padding)
+        top = max(0, top - padding)
+        right = min(width, left + crop_width + 2 * padding)
+        bottom = min(height, top + crop_height + 2 * padding)
+        cropped_device = source[top:bottom, left:right]
+        cropped_mask = mask[top:bottom, left:right]
+        cropped_mask = cv2.GaussianBlur(cropped_mask, (5, 5), 0)
+        return cropped_device, cropped_mask
 
     def _background(self, random: np.random.Generator) -> np.ndarray:
         base = random.integers(45, 180, size=3)
@@ -132,7 +193,8 @@ class SyntheticDatasetGenerator:
                     scale=(0.85, 1.1),
                     translate_percent=(-0.08, 0.08),
                     rotate=(-15, 15),
-                    border_mode=cv2.BORDER_REFLECT_101,
+                    border_mode=cv2.BORDER_CONSTANT,
+                    fill=0,
                     p=0.8,
                 ),
                 A.RandomBrightnessContrast(0.3, 0.3, p=0.8),
