@@ -4,6 +4,8 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from twintag_backend.api.scans import router as scans_router
+
 
 class HealthResponse(BaseModel):
     status: Literal["ok"]
@@ -12,6 +14,7 @@ class HealthResponse(BaseModel):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="TwinTag API", version="0.1.0")
+    app.include_router(scans_router)
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
