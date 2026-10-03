@@ -5,11 +5,13 @@ description = "API and processing pipeline for TwinTag digital-twin asset recogn
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.142.2",
+    "laspy[lazrs]>=2.6.1",
     "pye57>=0.4.19",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [project.scripts]
+twintag = "twintag_backend.cli:run"
 twintag-backend = "twintag_backend.main:run"
 
 [build-system]
