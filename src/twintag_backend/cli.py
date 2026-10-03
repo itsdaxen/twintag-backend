@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+from twintag_backend.e57.images import E57ImageExtractor
 from twintag_backend.e57.potree import PotreeConverter
 from twintag_backend.e57.preview import E57PreviewExporter
 
@@ -14,7 +15,17 @@ def run() -> None:
     preview.add_argument("--points", type=int, default=2_000_000)
     preview.add_argument("--potree-output", type=Path)
     preview.add_argument("--converter", type=Path)
+    panoramas = commands.add_parser(
+        "panoramas", help="Extract registered panorama cube faces"
+    )
+    panoramas.add_argument("source", type=Path)
+    panoramas.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+
+    if args.command == "panoramas":
+        images = E57ImageExtractor().extract(args.source, args.output)
+        print(f"Extracted {len(images):,} panorama faces to {args.output}")
+        return
 
     result = E57PreviewExporter().export(args.source, args.output, args.points)
     print(f"Exported {result.point_count:,} points to {result.path}")

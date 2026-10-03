@@ -1,5 +1,6 @@
+import json
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pye57
@@ -53,12 +54,23 @@ class E57ImageExtractor:
                 scan.get_header(index).guid: index for index in range(scan.scan_count)
             }
             images = self._extract_images(scan, output_directory, sweep_indexes)
+            if images:
+                self._write_manifest(output_directory / "manifest.json", images)
         except Exception as exc:
             raise E57ReadError(f"Could not extract E57 images: {source.name}") from exc
         finally:
             scan.close()
 
         return tuple(images)
+
+    @staticmethod
+    def _write_manifest(target: Path, images: list[ExtractedImage]) -> None:
+        payload = []
+        for image in images:
+            item = asdict(image)
+            item["path"] = image.path.name
+            payload.append(item)
+        target.write_text(json.dumps({"images": payload}, indent=2) + "\n")
 
     @staticmethod
     def _validate_source(source: Path) -> None:
