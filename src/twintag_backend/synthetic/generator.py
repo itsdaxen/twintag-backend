@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -35,15 +36,19 @@ class SyntheticDataset:
 
 class SyntheticDatasetGenerator:
     def __init__(
-        self, size: int = 640, background_directory: Path | None = None
+        self,
+        size: int = 640,
+        background_directory: Path | None = None,
+        background_paths: Sequence[Path] | None = None,
     ) -> None:
         if size < 128:
             raise ValueError("size must be at least 128 pixels")
         self.size = size
-        backgrounds = (
+        backgrounds = tuple(background_paths or ()) or (
             tuple(
                 path
                 for path in sorted(background_directory.iterdir())
+                if not path.name.startswith("._")
                 if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
             )
             if background_directory and background_directory.is_dir()

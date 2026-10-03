@@ -5,6 +5,8 @@ from twintag_backend.e57.calibration import E57CalibrationExporter
 from twintag_backend.e57.images import E57ImageExtractor
 from twintag_backend.e57.potree import PotreeConverter
 from twintag_backend.e57.preview import E57PreviewExporter
+from twintag_backend.synthetic.exporter import YoloDatasetExporter
+from twintag_backend.synthetic.generator import DEFAULT_BACKGROUNDS_DIRECTORY
 
 
 def run() -> None:
@@ -38,7 +40,37 @@ def run() -> None:
         metavar=("LEFT", "TOP", "RIGHT", "BOTTOM"),
         help="Resolve an image-space detection box to a 3D location",
     )
+    synthetic = commands.add_parser(
+        "synthetic-dataset", help="Export a detector-ready YOLO dataset"
+    )
+    synthetic.add_argument("sources", type=Path, nargs=4)
+    synthetic.add_argument("--output", type=Path, required=True)
+    synthetic.add_argument("--samples", type=int, default=10_000)
+    synthetic.add_argument("--validation", type=float, default=0.2)
+    synthetic.add_argument(
+        "--backgrounds", type=Path, default=DEFAULT_BACKGROUNDS_DIRECTORY
+    )
+    synthetic.add_argument("--seed", type=int, default=615)
+    synthetic.add_argument("--class-name", default="ABB REX615")
+    synthetic.add_argument("--size", type=int, default=768)
     args = parser.parse_args()
+
+    if args.command == "synthetic-dataset":
+        result = YoloDatasetExporter().export(
+            args.sources,
+            args.output,
+            count=args.samples,
+            validation_fraction=args.validation,
+            backgrounds=args.backgrounds,
+            seed=args.seed,
+            class_name=args.class_name,
+            size=args.size,
+        )
+        print(
+            f"Exported {result.training_samples:,} training and "
+            f"{result.validation_samples:,} validation samples to {args.output}"
+        )
+        return
 
     if args.command == "panoramas":
         images = E57ImageExtractor().extract(args.source, args.output)
