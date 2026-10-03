@@ -20,6 +20,23 @@ IMAGE_BLOBS = {
 
 
 @dataclass(frozen=True)
+class PinholeIntrinsics:
+    focal_length: float
+    pixel_width: float
+    pixel_height: float
+    principal_point_x: float
+    principal_point_y: float
+
+    @property
+    def focal_x_pixels(self) -> float:
+        return self.focal_length / self.pixel_width
+
+    @property
+    def focal_y_pixels(self) -> float:
+        return self.focal_length / self.pixel_height
+
+
+@dataclass(frozen=True)
 class ExtractedImage:
     id: str
     sweep_index: int
@@ -34,6 +51,7 @@ class ExtractedImage:
     path: Path
     position: Vector3
     rotation: Quaternion
+    intrinsics: PinholeIntrinsics | None
 
 
 class E57ImageExtractor:
@@ -130,6 +148,7 @@ class E57ImageExtractor:
         target = output_directory / f"{image_id}.{extension}"
         target.write_bytes(blob.read_buffer().tobytes())
         position, rotation = self._pose(image)
+        intrinsics = self._intrinsics(representation_name, representation)
 
         return ExtractedImage(
             id=image_id,
@@ -145,6 +164,27 @@ class E57ImageExtractor:
             path=target,
             position=position,
             rotation=rotation,
+            intrinsics=intrinsics,
+        )
+
+    @staticmethod
+    def _intrinsics(
+        representation_name: str,
+        representation: pye57.libe57.StructureNode,
+    ) -> PinholeIntrinsics | None:
+        if representation_name != "pinholeRepresentation":
+            return None
+
+        return PinholeIntrinsics(
+            focal_length=E57ImageExtractor._float(representation, "focalLength"),
+            pixel_width=E57ImageExtractor._float(representation, "pixelWidth"),
+            pixel_height=E57ImageExtractor._float(representation, "pixelHeight"),
+            principal_point_x=E57ImageExtractor._float(
+                representation, "principalPointX"
+            ),
+            principal_point_y=E57ImageExtractor._float(
+                representation, "principalPointY"
+            ),
         )
 
     @staticmethod

@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from twintag_backend.e57.images import E57ImageExtractor, ExtractedImage
+from twintag_backend.e57.images import (
+    E57ImageExtractor,
+    ExtractedImage,
+    PinholeIntrinsics,
+)
 from twintag_backend.e57.reader import E57ReadError, Quaternion, Vector3
 
 
@@ -45,10 +49,18 @@ def test_writes_browser_manifest_with_relative_image_path(tmp_path: Path) -> Non
         path=tmp_path / "sweep-00-face-00.jpg",
         position=Vector3(1, 2, 3),
         rotation=Quaternion(0, 0, 0, 1),
+        intrinsics=PinholeIntrinsics(
+            focal_length=0.5,
+            pixel_width=0.000244140625,
+            pixel_height=0.000244140625,
+            principal_point_x=2048,
+            principal_point_y=2048,
+        ),
     )
 
     E57ImageExtractor._write_manifest(target, [image])
 
     manifest = target.read_text()
     assert '"path": "sweep-00-face-00.jpg"' in manifest
+    assert '"focal_length": 0.5' in manifest
     assert str(tmp_path) not in manifest
