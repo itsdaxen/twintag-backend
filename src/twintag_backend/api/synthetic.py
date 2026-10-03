@@ -1,4 +1,5 @@
 import base64
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Annotated
@@ -10,22 +11,31 @@ from twintag_backend.schemas.synthetic import (
     SyntheticDatasetPreviewResponse,
     SyntheticPreviewResponse,
 )
-from twintag_backend.synthetic.generator import SyntheticDatasetGenerator
+from twintag_backend.synthetic.generator import (
+    DEFAULT_BACKGROUNDS_DIRECTORY,
+    SyntheticDatasetGenerator,
+)
 
 router = APIRouter(prefix="/api/synthetic-datasets", tags=["synthetic datasets"])
 
 ALLOWED_MEDIA_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_SOURCE_BYTES = 15 * 1024 * 1024
 AUGMENTATIONS = [
-    "perspective",
-    "rotation",
-    "scale",
-    "brightness and contrast",
-    "blur and noise",
+    "real substation backgrounds",
+    "scale and panel placement",
+    "colour harmonisation",
+    "contact shadows",
+    "lighting gradients and spotlights",
+    "colour temperature",
+    "brightness, contrast and gamma",
+    "blur and sensor noise",
     "compression",
     "partial occlusion",
 ]
-SOURCE_ANGLES = ("Front", "Back", "Left", "Right")
+SOURCE_ANGLES = ("Front", "Front-left", "Front-right", "Side")
+BACKGROUNDS_DIRECTORY = Path(
+    os.environ.get("TWINTAG_BACKGROUNDS_DIR", DEFAULT_BACKGROUNDS_DIRECTORY)
+)
 
 
 @router.post("/preview", response_model=SyntheticDatasetPreviewResponse)
@@ -38,7 +48,9 @@ async def create_preview(
     seed: Annotated[int | None, Form()] = None,
 ) -> SyntheticDatasetPreviewResponse:
     if len(sources) != 4:
-        raise HTTPException(status_code=422, detail="Upload exactly four device images.")
+        raise HTTPException(
+            status_code=422, detail="Upload exactly four device images."
+        )
     if planned_samples < preview_count:
         raise HTTPException(
             status_code=422,
@@ -56,16 +68,23 @@ async def create_preview(
             content = await source.read(MAX_SOURCE_BYTES + 1)
             if len(content) > MAX_SOURCE_BYTES:
                 raise HTTPException(
-                    status_code=413, detail="Each source image must be 15 MB or smaller."
+                    status_code=413,
+                    detail="Each source image must be 15 MB or smaller.",
                 )
             if not content:
-                raise HTTPException(status_code=422, detail="Source images cannot be empty.")
+                raise HTTPException(
+                    status_code=422, detail="Source images cannot be empty."
+                )
             suffix = Path(source.filename or "device.jpg").suffix or ".jpg"
             source_path = workspace / f"source-{index + 1}{suffix}"
             source_path.write_bytes(content)
             source_paths.append(source_path)
 
-        generator = SyntheticDatasetGenerator()
+        generator = SyntheticDatasetGenerator(
+            background_directory=(
+                BACKGROUNDS_DIRECTORY if BACKGROUNDS_DIRECTORY.is_dir() else None
+            )
+        )
         for angle, source_path in zip(SOURCE_ANGLES, source_paths, strict=True):
             try:
                 generator.validate_source(source_path)

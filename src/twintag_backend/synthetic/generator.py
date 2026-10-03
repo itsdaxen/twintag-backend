@@ -6,6 +6,8 @@ import albumentations as A
 import cv2
 import numpy as np
 
+DEFAULT_BACKGROUNDS_DIRECTORY = Path(__file__).parent / "backgrounds"
+
 
 @dataclass(frozen=True)
 class BoundingBox:
@@ -32,10 +34,29 @@ class SyntheticDataset:
 
 
 class SyntheticDatasetGenerator:
-    def __init__(self, size: int = 640) -> None:
+    def __init__(
+        self, size: int = 640, background_directory: Path | None = None
+    ) -> None:
         if size < 128:
             raise ValueError("size must be at least 128 pixels")
         self.size = size
+        backgrounds = (
+            tuple(
+                path
+                for path in sorted(background_directory.iterdir())
+                if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+            )
+            if background_directory and background_directory.is_dir()
+            else ()
+        )
+        curated = tuple(
+            path
+            for path in backgrounds
+            if "-face-" not in path.stem
+            or path.stem.endswith(("face-01", "face-03", "face-04"))
+        )
+        self.backgrounds = curated or backgrounds
+        self._background_cache: dict[Path, np.ndarray] = {}
 
     def validate_source(self, source: Path) -> None:
         image = cv2.imread(str(source), cv2.IMREAD_COLOR)
@@ -103,7 +124,7 @@ class SyntheticDatasetGenerator:
     ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
         canvas = self._background(random)
         height, width = device.shape[:2]
-        maximum_side = int(self.size * random.uniform(0.38, 0.72))
+        maximum_side = int(self.size * random.uniform(0.16, 0.48))
         scale = maximum_side / max(height, width)
         resized_width = max(1, round(width * scale))
         resized_height = max(1, round(height * scale))
@@ -115,15 +136,129 @@ class SyntheticDatasetGenerator:
             (resized_width, resized_height),
             interpolation=cv2.INTER_LINEAR,
         )
-        left = int(random.integers(0, self.size - resized_width + 1))
-        top = int(random.integers(0, self.size - resized_height + 1))
+        left, top = self._panel_position(canvas, resized_width, resized_height, random)
         right = left + resized_width
         bottom = top + resized_height
+        region = canvas[top:bottom, left:right]
+        resized_device = self._harmonize(resized_device, resized_mask, region, random)
+        if random.random() < 0.6:
+            canvas = self._cast_shadow(canvas, resized_mask, left, top, random)
         alpha = resized_mask.astype(np.float32)[..., None] / 255
         region = canvas[top:bottom, left:right].astype(np.float32)
         composite = resized_device.astype(np.float32) * alpha + region * (1 - alpha)
         canvas[top:bottom, left:right] = np.clip(composite, 0, 255).astype(np.uint8)
+        canvas = self._relight(canvas, random)
         return canvas, (left, top, right, bottom)
+
+    @staticmethod
+    def _harmonize(
+        device: np.ndarray,
+        mask: np.ndarray,
+        region: np.ndarray,
+        random: np.random.Generator,
+    ) -> np.ndarray:
+        """Pull the device's brightness and tint part-way toward its surroundings."""
+        weights = mask.astype(np.float32) / 255
+        if float(weights.sum()) < 1:
+            return device
+        device_lab = cv2.cvtColor(device, cv2.COLOR_BGR2LAB).astype(np.float32)
+        region_lab = cv2.cvtColor(region, cv2.COLOR_BGR2LAB).astype(np.float32)
+        device_mean = (device_lab * weights[..., None]).sum((0, 1)) / weights.sum()
+        region_mean = region_lab.reshape(-1, 3).mean(axis=0)
+        strength = np.array(
+            [random.uniform(0.1, 0.35), *([random.uniform(0.05, 0.25)] * 2)],
+            dtype=np.float32,
+        )
+        device_lab += (region_mean - device_mean) * strength
+        device_lab = np.clip(device_lab, 0, 255).astype(np.uint8)
+        return cv2.cvtColor(device_lab, cv2.COLOR_LAB2BGR)
+
+    def _cast_shadow(
+        self,
+        canvas: np.ndarray,
+        mask: np.ndarray,
+        left: int,
+        top: int,
+        random: np.random.Generator,
+    ) -> np.ndarray:
+        """Darken a blurred, offset copy of the device silhouette behind it."""
+        height, width = mask.shape
+        offset = max(2, round(max(height, width) * random.uniform(0.01, 0.06)))
+        direction = random.uniform(0, 2 * np.pi)
+        dx = round(np.cos(direction) * offset)
+        dy = round(abs(np.sin(direction)) * offset)  # light mostly from above
+        shadow = np.zeros(canvas.shape[:2], dtype=np.float32)
+        shadow_left, shadow_top = left + dx, top + dy
+        x0, y0 = max(0, shadow_left), max(0, shadow_top)
+        x1 = min(self.size, shadow_left + width)
+        y1 = min(self.size, shadow_top + height)
+        if x1 <= x0 or y1 <= y0:
+            return canvas
+        shadow[y0:y1, x0:x1] = mask[
+            y0 - shadow_top : y1 - shadow_top, x0 - shadow_left : x1 - shadow_left
+        ]
+        kernel = max(3, (offset * 4) | 1)
+        shadow = cv2.GaussianBlur(shadow / 255, (kernel, kernel), 0)
+        darkness = 1 - shadow[..., None] * random.uniform(0.15, 0.45)
+        return np.clip(canvas.astype(np.float32) * darkness, 0, 255).astype(np.uint8)
+
+    def _relight(self, canvas: np.ndarray, random: np.random.Generator) -> np.ndarray:
+        """Apply scene-wide lighting: gradients, spotlights, colour cast, vignette."""
+        gain = np.ones((self.size, self.size), dtype=np.float32)
+        ys, xs = np.mgrid[0 : self.size, 0 : self.size].astype(np.float32) / self.size
+
+        if random.random() < 0.7:
+            angle = random.uniform(0, 2 * np.pi)
+            ramp = (xs - 0.5) * np.cos(angle) + (ys - 0.5) * np.sin(angle)
+            gain *= 1 + ramp * 2 * random.uniform(0.05, 0.3)
+
+        if random.random() < 0.4:
+            cx, cy = random.uniform(0, 1, size=2)
+            sigma = random.uniform(0.2, 0.6)
+            blob = np.exp(-((xs - cx) ** 2 + (ys - cy) ** 2) / (2 * sigma**2))
+            gain *= 1 + blob * random.uniform(-0.25, 0.3)
+
+        if random.random() < 0.3:
+            radius = np.sqrt((xs - 0.5) ** 2 + (ys - 0.5) ** 2) / np.sqrt(0.5)
+            gain *= 1 - radius**2 * random.uniform(0.1, 0.35)
+
+        lit = canvas.astype(np.float32) * gain[..., None]
+
+        if random.random() < 0.6:
+            temperature = random.uniform(-0.12, 0.12)  # >0 warm, <0 cool (BGR)
+            lit *= np.array([1 - temperature, 1, 1 + temperature], dtype=np.float32)
+
+        return np.clip(lit, 0, 255).astype(np.uint8)
+
+    @staticmethod
+    def _panel_position(
+        canvas: np.ndarray,
+        width: int,
+        height: int,
+        random: np.random.Generator,
+    ) -> tuple[int, int]:
+        """Prefer bright, neutral, low-texture regions typical of cabinet faces."""
+        hsv = cv2.cvtColor(canvas, cv2.COLOR_BGR2HSV)
+        gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Laplacian(gray, cv2.CV_32F)
+        candidates = []
+        minimum_top = round(canvas.shape[0] * 0.15)
+        maximum_top = min(
+            canvas.shape[0] - height,
+            round(canvas.shape[0] * 0.78) - height,
+        )
+        if maximum_top < minimum_top:
+            minimum_top = 0
+            maximum_top = canvas.shape[0] - height
+        for _ in range(24):
+            left = int(random.integers(0, canvas.shape[1] - width + 1))
+            top = int(random.integers(minimum_top, maximum_top + 1))
+            region = hsv[top : top + height, left : left + width]
+            texture = np.mean(np.abs(edges[top : top + height, left : left + width]))
+            score = float(region[..., 2].mean() - region[..., 1].mean() - texture)
+            candidates.append((score, left, top))
+        _, left, top = max(candidates)
+        return left, top
 
     def _extract_device(self, source: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         height, width = source.shape[:2]
@@ -147,16 +282,16 @@ class SyntheticDatasetGenerator:
         )
         connected_background = np.isin(components, border_labels)
         mask = np.where(connected_background, 0, 255).astype(np.uint8)
-        mask = cv2.morphologyEx(
-            mask, cv2.MORPH_CLOSE, np.ones((7, 7), dtype=np.uint8)
-        )
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((7, 7), dtype=np.uint8))
         points = cv2.findNonZero(mask)
         if points is None:
             raise ValueError("No device could be separated from the background")
         left, top, crop_width, crop_height = cv2.boundingRect(points)
         coverage = crop_width * crop_height / (width * height)
         if coverage > 0.95:
-            raise ValueError("Source image must be tightly framed on a clean background")
+            raise ValueError(
+                "Source image must be tightly framed on a clean background"
+            )
 
         padding = max(2, round(max(crop_width, crop_height) * 0.01))
         left = max(0, left - padding)
@@ -169,6 +304,9 @@ class SyntheticDatasetGenerator:
         return cropped_device, cropped_mask
 
     def _background(self, random: np.random.Generator) -> np.ndarray:
+        if self.backgrounds:
+            return self._real_background(random)
+
         base = random.integers(45, 180, size=3)
         vertical = np.linspace(-25, 25, self.size, dtype=np.float32)[:, None, None]
         noise = random.normal(0, 9, (self.size, self.size, 3))
@@ -180,6 +318,27 @@ class SyntheticDatasetGenerator:
             cv2.line(background, (x, 0), (x, self.size), color, 2)
         return np.clip(background, 0, 255).astype(np.uint8)
 
+    def _real_background(self, random: np.random.Generator) -> np.ndarray:
+        path = self.backgrounds[int(random.integers(0, len(self.backgrounds)))]
+        image = self._background_cache.get(path)
+        if image is None:
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError(f"Could not read background image: {path}")
+            self._background_cache[path] = image
+
+        height, width = image.shape[:2]
+        crop_size = max(64, round(min(height, width) * random.uniform(0.35, 1)))
+        left = int(random.integers(0, width - crop_size + 1))
+        top = int(random.integers(0, height - crop_size + 1))
+        crop = image[top : top + crop_size, left : left + crop_size]
+        background = cv2.resize(
+            crop, (self.size, self.size), interpolation=cv2.INTER_AREA
+        )
+        if random.random() < 0.4:
+            background = cv2.GaussianBlur(background, (5, 5), 0)
+        return background
+
     def _augment(
         self,
         image: np.ndarray,
@@ -188,25 +347,26 @@ class SyntheticDatasetGenerator:
     ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
         transform = A.Compose(
             [
-                A.Perspective(scale=(0.02, 0.1), keep_size=True, p=0.75),
-                A.Affine(
-                    scale=(0.85, 1.1),
-                    translate_percent=(-0.08, 0.08),
-                    rotate=(-15, 15),
-                    border_mode=cv2.BORDER_CONSTANT,
-                    fill=0,
-                    p=0.8,
+                A.RandomBrightnessContrast(0.15, 0.15, p=0.7),
+                A.RandomGamma(gamma_limit=(80, 120), p=0.3),
+                A.OneOf(
+                    [
+                        A.GaussianBlur(blur_limit=(3, 5)),
+                        A.MotionBlur(blur_limit=(3, 7)),
+                        A.Defocus(radius=(1, 3), alias_blur=(0.1, 0.3)),
+                    ],
+                    p=0.3,
                 ),
-                A.RandomBrightnessContrast(0.3, 0.3, p=0.8),
-                A.GaussianBlur(blur_limit=(3, 7), p=0.3),
-                A.GaussNoise(std_range=(0.01, 0.08), p=0.4),
+                A.Downscale(scale_range=(0.5, 0.9), p=0.2),
+                A.ISONoise(color_shift=(0.01, 0.05), intensity=(0.1, 0.45), p=0.35),
+                A.GaussNoise(std_range=(0.01, 0.05), p=0.35),
                 A.ImageCompression(quality_range=(45, 95), p=0.35),
                 A.CoarseDropout(
-                    num_holes_range=(1, 5),
-                    hole_height_range=(0.03, 0.12),
-                    hole_width_range=(0.03, 0.12),
-                    fill="random_uniform",
-                    p=0.35,
+                    num_holes_range=(1, 3),
+                    hole_height_range=(0.02, 0.06),
+                    hole_width_range=(0.02, 0.06),
+                    fill=0,
+                    p=0.15,
                 ),
             ],
             bbox_params=A.BboxParams(

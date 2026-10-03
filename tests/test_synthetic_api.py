@@ -7,7 +7,9 @@ from twintag_backend.main import app
 client = TestClient(app)
 
 
-def _files(content: bytes, media_type: str = "image/jpeg") -> list[tuple[str, tuple[str, bytes, str]]]:
+def _files(
+    content: bytes, media_type: str = "image/jpeg"
+) -> list[tuple[str, tuple[str, bytes, str]]]:
     return [
         ("sources", (f"relay-{index}.jpg", content, media_type))
         for index in range(1, 5)
@@ -23,7 +25,13 @@ def test_generates_synthetic_previews() -> None:
     response = client.post(
         "/api/synthetic-datasets/preview",
         files=_files(encoded.tobytes()),
-        data={"device_name": "ABB REX615", "device_type": "Protection relay", "preview_count": 2, "planned_samples": 1_000, "seed": 12},
+        data={
+            "device_name": "ABB REX615",
+            "device_type": "Protection relay",
+            "preview_count": 2,
+            "planned_samples": 1_000,
+            "seed": 12,
+        },
     )
 
     assert response.status_code == 200
@@ -57,7 +65,11 @@ def test_plans_ten_thousand_samples_by_default() -> None:
     response = client.post(
         "/api/synthetic-datasets/preview",
         files=_files(encoded.tobytes()),
-        data={"device_name": "ABB REX615", "device_type": "Protection relay", "preview_count": 1},
+        data={
+            "device_name": "ABB REX615",
+            "device_type": "Protection relay",
+            "preview_count": 1,
+        },
     )
 
     assert response.status_code == 200
