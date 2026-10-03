@@ -5,6 +5,7 @@ description = "API and processing pipeline for TwinTag digital-twin asset recogn
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.142.2",
+    "pye57>=0.4.19",
     "uvicorn[standard]>=0.54.0",
 ]
 
