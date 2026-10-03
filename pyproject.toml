@@ -4,9 +4,11 @@ version = "0.1.0"
 description = "API and processing pipeline for TwinTag digital-twin asset recognition"
 requires-python = ">=3.13"
 dependencies = [
+    "albumentations>=2.0.8",
     "fastapi>=0.142.2",
     "laspy[lazrs]>=2.6.1",
     "numpy>=2.5.3",
+    "opencv-python-headless>=5.0.0.93",
     "pillow>=12.3.0",
     "pye57>=0.4.19",
     "uvicorn[standard]>=0.54.0",
