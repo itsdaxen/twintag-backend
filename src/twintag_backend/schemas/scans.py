@@ -33,3 +33,37 @@ class Scan(BaseModel):
     source: ScanSource
     counts: ScanCounts
     stages: list[ProcessingStage]
+
+
+class TagPosition(BaseModel):
+    x: float
+    y: float
+    z: float
+
+
+class TagBox(BaseModel):
+    left: float
+    top: float
+    right: float
+    bottom: float
+
+
+class TagEvidence(BaseModel):
+    image_id: str
+    sweep_index: int = Field(ge=0)
+    face_index: int = Field(ge=0)
+    box: TagBox
+
+
+class AssetTag(BaseModel):
+    id: str
+    asset_type: str
+    label: str
+    source: Literal["model"]
+    status: Literal["detected", "reviewed"]
+    confidence: float = Field(ge=0, le=1)
+    position: TagPosition
+    observation_count: int = Field(ge=1)
+    sweep_count: int = Field(ge=1)
+    spatial_spread: float = Field(ge=0)
+    evidence: list[TagEvidence]
