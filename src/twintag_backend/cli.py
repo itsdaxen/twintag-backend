@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+from twintag_backend.detection.fusion import E57DetectionFusion
 from twintag_backend.detection.inference import DeviceDetector
 from twintag_backend.e57.calibration import E57CalibrationExporter
 from twintag_backend.e57.images import E57ImageExtractor
@@ -62,7 +63,34 @@ def run() -> None:
     detect.add_argument("--output", type=Path, required=True)
     detect.add_argument("--confidence", type=float, default=0.85)
     detect.add_argument("--size", type=int, default=1280)
+    fuse = commands.add_parser(
+        "fuse-detections", help="Map 2D detections to deduplicated 3D asset tags"
+    )
+    fuse.add_argument("source", type=Path)
+    fuse.add_argument("--detections", type=Path, required=True)
+    fuse.add_argument("--images", type=Path, required=True)
+    fuse.add_argument("--output", type=Path, required=True)
+    fuse.add_argument("--radius", type=float, default=0.30)
+    fuse.add_argument("--minimum-sweeps", type=int, default=2)
+    fuse.add_argument("--points", type=int, default=2_000_000)
     args = parser.parse_args()
+
+    if args.command == "fuse-detections":
+        report = E57DetectionFusion(
+            cluster_radius=args.radius,
+            minimum_sweeps=args.minimum_sweeps,
+        ).fuse(
+            args.source,
+            args.detections,
+            args.images / "manifest.json",
+            args.output,
+            max_points_per_sweep=args.points,
+        )
+        print(
+            f"Fused {report.positioned_detections:,} positioned detections into "
+            f"{len(report.tags):,} asset tags; wrote {args.output}"
+        )
+        return
 
     if args.command == "detect":
         report = DeviceDetector(
