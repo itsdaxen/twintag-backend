@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 
 import uvicorn
@@ -16,9 +17,19 @@ class HealthResponse(BaseModel):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="TwinTag API", version="0.1.0")
+    configured_origins = [
+        origin.strip()
+        for origin in os.getenv("TWINTAG_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            *configured_origins,
+        ],
+        allow_origin_regex=r"https://.*\.vercel\.app",
         allow_methods=["*"],
         allow_headers=["*"],
     )
