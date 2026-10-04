@@ -1,20 +1,22 @@
 import base64
-import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Annotated
 
+import cv2
+import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from twintag_backend.schemas.synthetic import (
     BoundingBoxResponse,
     SyntheticDatasetPreviewResponse,
     SyntheticPreviewResponse,
+    TrainingBackgroundListResponse,
+    TrainingBackgroundResponse,
 )
-from twintag_backend.synthetic.generator import (
-    DEFAULT_BACKGROUNDS_DIRECTORY,
-    SyntheticDatasetGenerator,
-)
+from twintag_backend.synthetic.background_library import BACKGROUND_LIBRARY
+from twintag_backend.synthetic.generator import SyntheticDatasetGenerator
 
 router = APIRouter(prefix="/api/synthetic-datasets", tags=["synthetic datasets"])
 
@@ -33,9 +35,67 @@ AUGMENTATIONS = [
     "partial occlusion",
 ]
 SOURCE_ANGLES = ("Front", "Front-left", "Front-right", "Side")
-BACKGROUNDS_DIRECTORY = Path(
-    os.environ.get("TWINTAG_BACKGROUNDS_DIR", DEFAULT_BACKGROUNDS_DIRECTORY)
-)
+
+
+def _background_response(background) -> TrainingBackgroundResponse:
+    return TrainingBackgroundResponse(
+        id=background.id,
+        name=background.name,
+        source=background.source,
+        image_url=f"/api/synthetic-datasets/backgrounds/{background.id}/image",
+    )
+
+
+@router.get("/backgrounds", response_model=TrainingBackgroundListResponse)
+def list_backgrounds() -> TrainingBackgroundListResponse:
+    backgrounds = BACKGROUND_LIBRARY.list()
+    return TrainingBackgroundListResponse(
+        backgrounds=[_background_response(item) for item in backgrounds],
+        default_count=sum(item.source == "default" for item in backgrounds),
+        custom_count=sum(item.source == "custom" for item in backgrounds),
+    )
+
+
+@router.get("/backgrounds/{background_id}/image")
+def get_background_image(background_id: str) -> FileResponse:
+    try:
+        background = BACKGROUND_LIBRARY.find(background_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Background not found.") from exc
+    return FileResponse(background.path)
+
+
+@router.post("/backgrounds", response_model=TrainingBackgroundResponse, status_code=201)
+async def add_background(background: Annotated[UploadFile, File()]) -> TrainingBackgroundResponse:
+    if background.content_type not in ALLOWED_MEDIA_TYPES:
+        raise HTTPException(status_code=415, detail="Upload a JPEG, PNG or WebP image.")
+    content = await background.read(MAX_SOURCE_BYTES + 1)
+    if not content or len(content) > MAX_SOURCE_BYTES:
+        raise HTTPException(status_code=413, detail="Background must be between 1 byte and 15 MB.")
+    decoded = cv2.imdecode(np.frombuffer(content, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if decoded is None:
+        raise HTTPException(status_code=422, detail="Background image could not be read.")
+    try:
+        created = BACKGROUND_LIBRARY.add(background.filename or "background.jpg", content)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    return _background_response(created)
+
+
+@router.delete("/backgrounds/{background_id}", status_code=204)
+def remove_background(background_id: str) -> None:
+    try:
+        BACKGROUND_LIBRARY.remove(background_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Background not found.") from exc
+
+
+@router.post("/backgrounds/restore-defaults", response_model=TrainingBackgroundListResponse)
+def restore_default_backgrounds() -> TrainingBackgroundListResponse:
+    BACKGROUND_LIBRARY.restore_defaults()
+    return list_backgrounds()
 
 
 @router.post("/preview", response_model=SyntheticDatasetPreviewResponse)
@@ -81,9 +141,7 @@ async def create_preview(
             source_paths.append(source_path)
 
         generator = SyntheticDatasetGenerator(
-            background_directory=(
-                BACKGROUNDS_DIRECTORY if BACKGROUNDS_DIRECTORY.is_dir() else None
-            )
+            background_paths=BACKGROUND_LIBRARY.active_paths()
         )
         for angle, source_path in zip(SOURCE_ANGLES, source_paths, strict=True):
             try:

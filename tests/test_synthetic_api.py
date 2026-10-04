@@ -1,8 +1,11 @@
+from pathlib import Path
+
 import cv2
 import numpy as np
 from fastapi.testclient import TestClient
 
 from twintag_backend.main import app
+from twintag_backend.synthetic.background_library import TrainingBackgroundLibrary
 
 client = TestClient(app)
 
@@ -95,3 +98,38 @@ def test_identifies_invalid_source_angle() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"].startswith("Front image:")
+
+
+def test_manages_training_backgrounds(tmp_path: Path, monkeypatch) -> None:
+    defaults = tmp_path / "defaults"
+    defaults.mkdir()
+    image = np.full((80, 120, 3), 180, dtype=np.uint8)
+    success, encoded = cv2.imencode(".jpg", image)
+    assert success
+    (defaults / "panel-room.jpg").write_bytes(encoded.tobytes())
+    library = TrainingBackgroundLibrary(tmp_path / "state", defaults)
+    monkeypatch.setattr("twintag_backend.api.synthetic.BACKGROUND_LIBRARY", library)
+
+    listed = client.get("/api/synthetic-datasets/backgrounds")
+    assert listed.status_code == 200
+    assert listed.json()["default_count"] == 1
+    background_id = listed.json()["backgrounds"][0]["id"]
+    assert client.get(
+        f"/api/synthetic-datasets/backgrounds/{background_id}/image"
+    ).status_code == 200
+
+    uploaded = client.post(
+        "/api/synthetic-datasets/backgrounds",
+        files={"background": ("custom.jpg", encoded.tobytes(), "image/jpeg")},
+    )
+    assert uploaded.status_code == 201
+    assert uploaded.json()["source"] == "custom"
+
+    assert client.delete(
+        f"/api/synthetic-datasets/backgrounds/{background_id}"
+    ).status_code == 204
+    assert client.get("/api/synthetic-datasets/backgrounds").json()["default_count"] == 0
+
+    restored = client.post("/api/synthetic-datasets/backgrounds/restore-defaults")
+    assert restored.status_code == 200
+    assert restored.json()["default_count"] == 1
