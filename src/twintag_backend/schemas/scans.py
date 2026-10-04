@@ -55,6 +55,20 @@ class TagEvidence(BaseModel):
     box: TagBox
 
 
+class ExtractedText(BaseModel):
+    text: str
+    confidence: float = Field(ge=0, le=1)
+    evidence_image_id: str
+
+
+class AssetContext(BaseModel):
+    model: str
+    inference: Literal["precomputed"]
+    official_labels: list[ExtractedText] = Field(default_factory=list)
+    inspection_markings: list[ExtractedText] = Field(default_factory=list)
+    field_notes: list[ExtractedText] = Field(default_factory=list)
+
+
 class AssetTag(BaseModel):
     id: str
     asset_type: str
@@ -67,3 +81,4 @@ class AssetTag(BaseModel):
     sweep_count: int = Field(ge=1)
     spatial_spread: float = Field(ge=0)
     evidence: list[TagEvidence]
+    context: AssetContext | None = None

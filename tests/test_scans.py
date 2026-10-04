@@ -81,6 +81,15 @@ def test_list_scan_tags_returns_fused_real_detections() -> None:
     assert tags[0]["confidence"] == 0.91962
     assert tags[0]["position"] == {"x": -5.767, "y": -1.793, "z": 1.032}
     assert tags[0]["sweep_count"] == 4
+    assert tags[0]["context"]["model"] == "Qwen/Qwen3-VL-8B-Instruct"
+    assert tags[0]["context"]["inference"] == "precomputed"
+    assert tags[0]["context"]["official_labels"] == [
+        {
+            "text": "H05 SOLAR 2",
+            "confidence": 0.95,
+            "evidence_image_id": "sweep-14-face-01",
+        }
+    ]
     assert tags[0]["evidence"][0] == {
         "image_id": "sweep-03-face-01",
         "sweep_index": 3,

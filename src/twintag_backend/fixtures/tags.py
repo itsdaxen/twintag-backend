@@ -1,4 +1,14 @@
-from twintag_backend.schemas.scans import AssetTag, TagBox, TagEvidence, TagPosition
+import json
+from pathlib import Path
+
+from twintag_backend.schemas.scans import (
+    AssetContext,
+    AssetTag,
+    ExtractedText,
+    TagBox,
+    TagEvidence,
+    TagPosition,
+)
 
 View = tuple[int, int, tuple[float, float, float, float]]
 
@@ -101,6 +111,12 @@ _TAG_DATA: tuple[
     ),
 )
 
+_OCR_RESULTS_PATH = Path(__file__).with_name("data") / "context_ocr_qwen3_vl_8b.json"
+_OCR_RESULTS = json.loads(_OCR_RESULTS_PATH.read_text())
+_OCR_BY_ASSET = {
+    key.split("-sweep-", 1)[0]: (key, value) for key, value in _OCR_RESULTS.items()
+}
+
 
 def _tag(
     tag_id: str,
@@ -119,6 +135,23 @@ def _tag(
         )
         for sweep, face, box in views
     ]
+    result_key, context_data = _OCR_BY_ASSET[tag_id]
+    evidence_image_id = result_key.split("-", 2)[2]
+    context = AssetContext(
+        model="Qwen/Qwen3-VL-8B-Instruct",
+        inference="precomputed",
+        **{
+            category: [
+                ExtractedText(
+                    text=item["text"],
+                    confidence=item["confidence"],
+                    evidence_image_id=evidence_image_id,
+                )
+                for item in values
+            ]
+            for category, values in context_data.items()
+        },
+    )
     return AssetTag(
         id=tag_id,
         asset_type="ABB REX615",
@@ -131,6 +164,7 @@ def _tag(
         sweep_count=len({sweep for sweep, _, _ in views}),
         spatial_spread=spread,
         evidence=evidence,
+        context=context,
     )
 
 

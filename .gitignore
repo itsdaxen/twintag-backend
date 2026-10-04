@@ -21,5 +21,7 @@ dist/
 .vscode/
 
 data/
+!src/twintag_backend/fixtures/data/
+!src/twintag_backend/fixtures/data/context_ocr_qwen3_vl_8b.json
 artifacts/
 models/

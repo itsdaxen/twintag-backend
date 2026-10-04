@@ -1,0 +1,188 @@
+{
+  "asset-001-sweep-14-face-01": {
+    "official_labels": [
+      {
+        "text": "H05 SOLAR 2",
+        "confidence": 0.95
+      }
+    ],
+    "inspection_markings": [
+      {
+        "text": "ABB",
+        "confidence": 0.95
+      },
+      {
+        "text": "TEST EDR.MGSTR TESTED",
+        "confidence": 0.9
+      },
+      {
+        "text": "FINAL CONTROL PASSED",
+        "confidence": 0.9
+      }
+    ],
+    "field_notes": [
+      {
+        "text": "KOKOVA VIKKO EI MOMENTISSA",
+        "confidence": 0.85
+      }
+    ]
+  },
+  "asset-002-sweep-13-face-01": {
+    "official_labels": [
+      {
+        "text": "H04 SOLAR 1",
+        "confidence": 0.95
+      }
+    ],
+    "inspection_markings": [
+      {
+        "text": "ABB",
+        "confidence": 0.98
+      },
+      {
+        "text": "TEST EDİLMİŞTİR TESTED",
+        "confidence": 0.92
+      },
+      {
+        "text": "FINAL CONTROL PASSED",
+        "confidence": 0.9
+      }
+    ],
+    "field_notes": [
+      {
+        "text": "KONUOJA KISKO El momentissa",
+        "confidence": 0.85
+      }
+    ]
+  },
+  "asset-003-sweep-11-face-01": {
+    "official_labels": [
+      {
+        "text": "H02 STATION TRANSFORMER",
+        "confidence": 0.95
+      }
+    ],
+    "inspection_markings": [
+      {
+        "text": "ABB",
+        "confidence": 0.95
+      },
+      {
+        "text": "TEST EDILMISTIK TESTED",
+        "confidence": 0.9
+      },
+      {
+        "text": "FINAL CONTROL PASSED",
+        "confidence": 0.9
+      }
+    ],
+    "field_notes": [
+      {
+        "text": "kokoosa kisko E1 nome koko matkan",
+        "confidence": 0.85
+      }
+    ]
+  },
+  "asset-004-sweep-12-face-01": {
+    "official_labels": [
+      {
+        "text": "H03 METERING",
+        "confidence": 0.98
+      }
+    ],
+    "inspection_markings": [
+      {
+        "text": "ABB",
+        "confidence": 0.95
+      },
+      {
+        "text": "TEST EDILMISTIR TESTED",
+        "confidence": 0.92
+      },
+      {
+        "text": "FINAL CONTROL PASSED",
+        "confidence": 0.9
+      }
+    ],
+    "field_notes": [
+      {
+        "text": "KOROOSA WISKO E1 MOMENTISSA",
+        "confidence": 0.85
+      }
+    ]
+  },
+  "asset-005-sweep-10-face-01": {
+    "official_labels": [
+      {
+        "text": "H01 PT1",
+        "confidence": 0.98
+      }
+    ],
+    "inspection_markings": [
+      {
+        "text": "ABB",
+        "confidence": 0.95
+      },
+      {
+        "text": "TEST EDILMISTÄ TESTED",
+        "confidence": 0.92
+      },
+      {
+        "text": "FINAL CONTROL PASSED",
+        "confidence": 0.9
+      }
+    ],
+    "field_notes": [
+      {
+        "text": "Kokoosa kisko Ei momentissa",
+        "confidence": 0.85
+      }
+    ]
+  },
+  "asset-006-sweep-07-face-01": {
+    "official_labels": [
+      {
+        "text": "615",
+        "confidence": 0.98
+      },
+      {
+        "text": "ABB",
+        "confidence": 0.98
+      },
+      {
+        "text": "RITTAL",
+        "confidence": 0.95
+      }
+    ],
+    "inspection_markings": [],
+    "field_notes": [
+      {
+        "text": "OT1",
+        "confidence": 0.95
+      }
+    ]
+  },
+  "asset-007-sweep-07-face-01": {
+    "official_labels": [
+      {
+        "text": "615",
+        "confidence": 0.95
+      },
+      {
+        "text": "ABB",
+        "confidence": 0.95
+      },
+      {
+        "text": "RITTAL",
+        "confidence": 0.95
+      }
+    ],
+    "inspection_markings": [],
+    "field_notes": [
+      {
+        "text": "OT1",
+        "confidence": 0.9
+      }
+    ]
+  }
+}
