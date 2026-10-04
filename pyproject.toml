@@ -15,6 +15,11 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
 ]
 
+[project.optional-dependencies]
+inference = [
+    "ultralytics>=8.4.172",
+]
+
 [project.scripts]
 twintag = "twintag_backend.cli:run"
 twintag-backend = "twintag_backend.main:run"

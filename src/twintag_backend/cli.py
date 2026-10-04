@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+from twintag_backend.detection.inference import DeviceDetector
 from twintag_backend.e57.calibration import E57CalibrationExporter
 from twintag_backend.e57.images import E57ImageExtractor
 from twintag_backend.e57.potree import PotreeConverter
@@ -53,7 +54,27 @@ def run() -> None:
     synthetic.add_argument("--seed", type=int, default=615)
     synthetic.add_argument("--class-name", default="ABB REX615")
     synthetic.add_argument("--size", type=int, default=768)
+    detect = commands.add_parser(
+        "detect", help="Detect trained device classes in extracted panorama images"
+    )
+    detect.add_argument("images", type=Path)
+    detect.add_argument("--model", type=Path, required=True)
+    detect.add_argument("--output", type=Path, required=True)
+    detect.add_argument("--confidence", type=float, default=0.85)
+    detect.add_argument("--size", type=int, default=1280)
     args = parser.parse_args()
+
+    if args.command == "detect":
+        report = DeviceDetector(
+            args.model,
+            confidence_threshold=args.confidence,
+            image_size=args.size,
+        ).detect_directory(args.images, args.output)
+        print(
+            f"Detected {len(report.detections):,} devices across "
+            f"{report.image_count:,} images; wrote {args.output}"
+        )
+        return
 
     if args.command == "synthetic-dataset":
         result = YoloDatasetExporter().export(
