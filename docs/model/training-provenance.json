@@ -1,0 +1,48 @@
+{
+  "reviewed_on": "2026-10-07",
+  "source": "Recorded tool outputs from the original TwinTag hackathon Codex session, 2026-10-03 through 2026-10-04; cross-checked against the retained CSV and checkpoint metadata.",
+  "detector": {
+    "model": "YOLO11m",
+    "provider": "RunPod",
+    "cloud": "Secure Cloud",
+    "gpu_reported_by_provider_and_runtime": "NVIDIA GeForce RTX 4090",
+    "python": "3.12.3",
+    "pytorch": "2.8.0+cu128",
+    "ultralytics": "8.4.172",
+    "training_images": 8000,
+    "synthetic_validation_images": 2000,
+    "completed_logged_epochs": 10,
+    "best_checkpoint_epoch_one_based": 8,
+    "best_checkpoint_epoch_zero_based": 7,
+    "best_checkpoint_validation": {
+      "precision": 1.0,
+      "recall": 0.99995,
+      "map50": 0.995,
+      "map50_95": 0.99487
+    },
+    "evidence": [
+      {"timestamp_utc": "2026-10-04T00:13:41.275Z", "record": "Successful RunPod Secure Cloud pod allocation reported gpuDisplayName RTX 4090."},
+      {"timestamp_utc": "2026-10-04T00:14:33.064Z", "record": "Remote GPU query reported NVIDIA GeForce RTX 4090."},
+      {"timestamp_utc": "2026-10-04T00:36:37.477Z", "record": "Training label scan completed at 8000/8000 images with zero corrupt images."},
+      {"timestamp_utc": "2026-10-04T00:47:14.241Z", "record": "Validation output reported 2000 images and 2000 instances."},
+      {"timestamp_utc": "2026-10-04T00:48:59.121Z", "record": "Ultralytics runtime reported Python 3.12.3, torch 2.8.0+cu128 and CUDA:0 NVIDIA GeForce RTX 4090."}
+    ],
+    "epoch_note": "An interim assistant summary said stopped at epoch 9. The retained completed CSV has epochs 1 through 10, and the best checkpoint's epoch 7 plus embedded train_results 1 through 8 identify its saved state as completed epoch 8."
+  },
+  "context_inference": {
+    "model": "Qwen/Qwen3-VL-8B-Instruct",
+    "provider": "RunPod",
+    "evidence_crops": 7,
+    "fine_tuned": false,
+    "saved_results": "src/twintag_backend/fixtures/data/context_ocr_qwen3_vl_8b.json"
+  },
+  "real_scan": {
+    "images": 108,
+    "detector_observations": 38,
+    "fused_asset_tags": 7,
+    "confidence_threshold": 0.85,
+    "confidence_range": [0.851192, 0.967532],
+    "accuracy_benchmark": null
+  },
+  "privacy": "Only run facts are retained here. No credentials, account identifiers, SSH keys or endpoints, unrelated messages, or full chat exports are included."
+}
